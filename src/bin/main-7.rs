@@ -63,9 +63,26 @@ fn main() {
     let root = build_directory_tree(&content);
     println!("{}", root.print(0));
 
-    let mut total_size = 0;
-    determine_size(&root, true, &mut total_size);
-    println!("The total size is {}.", total_size);
+    let mut sizes = Vec::new();
+    determine_sizes_of_all_directories(&root, &mut sizes);
+    let total_size_small_directories = sizes.iter().filter(|&size| *size < 100_000).sum::<usize>();
+    println!("The total size is {}.", total_size_small_directories);
+
+    let total_disk_space = 70_000_000;
+    let required_disk_space = 30_000_000;
+    let used_disk_space = sizes.iter().max().unwrap();
+    let unused_disk_space = total_disk_space - used_disk_space;
+    let necessary_to_free = required_disk_space - unused_disk_space;
+
+    let x = sizes
+        .iter()
+        .filter(|&size| *size > necessary_to_free)
+        .min()
+        .expect("Should be able to determine directory");
+    println!(
+        "The small directory that would free up enough space has size {}.",
+        x
+    );
 }
 
 fn build_directory_tree(content: &str) -> Directory {
@@ -75,7 +92,6 @@ fn build_directory_tree(content: &str) -> Directory {
     let mut path = Vec::new();
     while let Some(l) = lines.next() {
         if is_command(l) {
-            // println!("parsing command {} in path {:?}", l, path);
             let (cmd, arg) = parse_command(l);
             match cmd.as_str() {
                 "cd" => {
@@ -84,7 +100,6 @@ fn build_directory_tree(content: &str) -> Directory {
                         "/" => (),
                         ".." => {
                             path.pop();
-                            // println!("navigating to {:?}", path);
                             current = navigate_to_path(&mut root, &path);
                         }
                         _ => {
@@ -99,11 +114,9 @@ fn build_directory_tree(content: &str) -> Directory {
         } else {
             if is_dir(l) {
                 let name = parse_directory_name(l);
-                // println!("adding dir {}", name);
                 current.add_subdirectory(&name);
             } else {
                 let (name, size) = parse_filename_and_size(l);
-                // println!("adding file {}", name);
                 current.add_file(&name, size);
             }
         }
@@ -152,19 +165,14 @@ fn parse_filename_and_size(l: &str) -> (String, usize) {
     )
 }
 
-fn determine_size(dir: &Directory, is_root: bool, total_size: &mut usize) -> usize {
+fn determine_sizes_of_all_directories(dir: &Directory, sizes: &mut Vec<usize>) -> usize {
     let mut size = 0;
     for subdir in dir.children.iter() {
-        size += determine_size(subdir, false, total_size);
+        size += determine_sizes_of_all_directories(subdir, sizes);
     }
-    if !is_root {
-        for file in dir.files.iter() {
-            size += file.size;
-        }
+    for file in dir.files.iter() {
+        size += file.size;
     }
-    // only count directories smaller than the requested threshold
-    if size < 100_000 {
-        *total_size += size
-    }
+    sizes.push(size);
     size
 }
