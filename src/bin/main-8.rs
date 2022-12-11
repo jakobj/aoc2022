@@ -4,14 +4,23 @@ fn main() {
     let file_name = "inputs/8.txt";
     let content = fs::read_to_string(file_name).expect("Should be able to read file");
     let map = parse_map(&content);
-    print(&map);
+    // print(&map);
     let visibility_map = compute_visibility_map(&map);
-    print(&visibility_map);
+    // print(&visibility_map);
     let n_visible = visibility_map
         .iter()
         .map(|v| v.iter().sum::<u32>())
         .sum::<u32>();
     println!("{} trees are visible from the outside.", n_visible);
+
+    let scenic_map = compute_scenic_map(&map);
+    // print(&scenic_map);
+    let scenic_score = scenic_map
+        .iter()
+        .map(|v| v.iter().max().unwrap())
+        .max()
+        .unwrap();
+    println!("The best tree has a scenic score of {}.", scenic_score);
 }
 
 fn parse_map(content: &str) -> Vec<Vec<u32>> {
@@ -88,4 +97,49 @@ fn print(map: &Vec<Vec<u32>>) {
         }
         print!("\n");
     }
+}
+
+fn compute_scenic_map(map: &Vec<Vec<u32>>) -> Vec<Vec<u32>> {
+    let mut scenic_map = Vec::new();
+    for i in 0..map.len() {
+        scenic_map.push(Vec::new());
+        scenic_map[i].resize(map[i].len(), 0);
+        for j in 0..map[i].len() {
+            scenic_map[i][j] = compute_scenic_score(map, i, j);
+        }
+    }
+    scenic_map
+}
+
+fn compute_scenic_score(map: &Vec<Vec<u32>>, row: usize, col: usize) -> u32 {
+    let height = map[row][col];
+    let mut scenic_score_top = 0;
+    for i in (0..row).rev() {
+        scenic_score_top += 1;
+        if map[i][col] >= height {
+            break;
+        }
+    }
+    let mut scenic_score_bottom = 0;
+    for i in row + 1..map.len() {
+        scenic_score_bottom += 1;
+        if map[i][col] >= height {
+            break;
+        }
+    }
+    let mut scenic_score_left = 0;
+    for j in (0..col).rev() {
+        scenic_score_left += 1;
+        if map[row][j] >= height {
+            break;
+        }
+    }
+    let mut scenic_score_right = 0;
+    for j in col + 1..map[row].len() {
+        scenic_score_right += 1;
+        if map[row][j] >= height {
+            break;
+        }
+    }
+    scenic_score_top * scenic_score_bottom * scenic_score_left * scenic_score_right
 }
