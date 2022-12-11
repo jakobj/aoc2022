@@ -3,7 +3,11 @@ use std::{collections::HashSet, fs};
 fn main() {
     let file_name = "inputs/9.txt";
     let content = fs::read_to_string(file_name).expect("Should be able to read file");
-    let tail_positions = compute_tail_positions(&content);
+    let visited_positions = compute_visited_positions(&content, 10);
+    let tail_positions = visited_positions
+        .iter()
+        .map(|v| v.last().unwrap().clone())
+        .collect::<Vec<(i64, i64)>>();
     let unique_tail_positions = tail_positions
         .into_iter()
         .collect::<HashSet<(i64, i64)>>()
@@ -14,14 +18,20 @@ fn main() {
     );
 }
 
-fn compute_tail_positions(content: &str) -> Vec<(i64, i64)> {
-    let mut head_position = (0, 0);
-    let mut tail_positions = vec![(0, 0)];
-    for l in content.lines() {
-        let instruction = parse_instruction(l);
-        apply_instruction(instruction, &mut head_position, &mut tail_positions);
+fn compute_visited_positions(content: &str, rope_length: usize) -> Vec<Vec<(i64, i64)>> {
+    let mut visited_positions = Vec::new();
+    visited_positions.resize(1, Vec::new());
+    for _ in 0..rope_length {
+        visited_positions[0].push((0, 0));
     }
-    tail_positions
+    for l in content.lines() {
+        let (direction, count) = parse_instruction(l);
+        for _ in 0..count {
+            let positions = apply_instruction(direction, visited_positions.last().unwrap());
+            visited_positions.push(positions.clone());
+        }
+    }
+    visited_positions
 }
 
 fn parse_instruction(l: &str) -> (char, usize) {
@@ -32,25 +42,25 @@ fn parse_instruction(l: &str) -> (char, usize) {
     )
 }
 
-fn apply_instruction(
-    instruction: (char, usize),
-    head_position: &mut (i64, i64),
-    tail_positions: &mut Vec<(i64, i64)>,
-) {
-    for _ in 0..instruction.1 {
-        match instruction.0 {
-            'L' => head_position.1 -= 1,
-            'R' => head_position.1 += 1,
-            'U' => head_position.0 += 1,
-            'D' => head_position.0 -= 1,
-            _ => panic!("Unknown instruction"),
-        }
-        let position = update_tail_position(head_position, tail_positions.last().unwrap());
-        tail_positions.push(position);
+fn apply_instruction(direction: char, positions: &Vec<(i64, i64)>) -> Vec<(i64, i64)> {
+    let mut new_positions = Vec::new();
+    let mut head_position = positions[0];
+    match direction {
+        'L' => head_position.1 -= 1,
+        'R' => head_position.1 += 1,
+        'U' => head_position.0 += 1,
+        'D' => head_position.0 -= 1,
+        _ => panic!("Unknown instruction"),
     }
+    new_positions.push(head_position);
+    for i in 1..positions.len() {
+        let position = update_follower_position(&new_positions[i - 1], &positions[i]);
+        new_positions.push(position);
+    }
+    new_positions
 }
 
-fn update_tail_position(head_position: &(i64, i64), tail_position: &(i64, i64)) -> (i64, i64) {
+fn update_follower_position(head_position: &(i64, i64), tail_position: &(i64, i64)) -> (i64, i64) {
     if (head_position.0 - tail_position.0).abs() <= 1
         && (head_position.1 - tail_position.1).abs() <= 1
     {
