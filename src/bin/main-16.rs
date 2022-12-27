@@ -4,33 +4,47 @@ use std::{
     fs,
 };
 
-use rand::distributions::Distribution;
-use rand::{distributions::Uniform, Rng, SeedableRng};
 use regex::Regex;
-
-static WITH_ELEPHANT: bool = true;
-static MAX_TIME: usize = 26;
-// static WITH_ELEPHANT: bool = false;
-// static MAX_TIME: usize = 30;
 
 fn main() {
     let filename = "inputs/16.txt";
     let content = fs::read_to_string(filename).expect("Should be able to read file");
     let nodes = parse_graph(content);
     let nodes = determine_effective_graph(&nodes);
-    if !WITH_ELEPHANT {
-        let most_releasable_pressure = determine_most_releasable_pressure(nodes);
-        println!(
-            "The most pressure possible to release is {}.",
-            most_releasable_pressure
-        );
-    } else {
-        let most_releasable_pressure = determine_most_releasable_pressure_with_elephant(nodes);
-        println!(
-            "The most pressure possible to release is {}.",
-            most_releasable_pressure
-        );
+
+    let sets = determine_pressure_for_subsets(&nodes, 30);
+    let max_pressure = sets.iter().map(|(_k, p)| p).max().unwrap();
+    println!(
+        "The most pressure possible to release alone is {}.",
+        max_pressure,
+    );
+
+    let sets = determine_pressure_for_subsets(&nodes, 26);
+    let mut max_pressure = 0;
+    for (s0, p0) in sets.iter() {
+        for (s1, p1) in sets.iter() {
+            if disjoint(s0, s1) {
+                if p0 + p1 > max_pressure {
+                    max_pressure = p0 + p1;
+                }
+            }
+        }
     }
+    println!(
+        "The most pressure possible to release with an elephant is {}.",
+        max_pressure,
+    );
+}
+
+fn disjoint(s0: &str, s1: &str) -> bool {
+    for l0 in s0.split(",") {
+        for l1 in s1.split(",") {
+            if l0 == l1 {
+                return false;
+            }
+        }
+    }
+    true
 }
 
 fn parse_graph(content: String) -> HashMap<String, Node> {
@@ -83,6 +97,10 @@ fn determine_effective_graph(nodes: &HashMap<String, Node>) -> HashMap<String, E
         let mut edges = Vec::new();
         for target in nodes.keys() {
             if source == target {
+                continue;
+            }
+
+            if target.chars().last().unwrap() != 'o' {
                 continue;
             }
 
@@ -167,116 +185,73 @@ impl PartialOrd for Path {
     }
 }
 
-fn determine_most_releasable_pressure(nodes: HashMap<String, EffectiveNode>) -> usize {
-    let mut sequence = nodes
-        .iter()
-        .map(|(l, _n)| l.to_string())
-        .filter(|l| l.chars().last().unwrap() == 'o')
-        .collect::<Vec<String>>();
-    sequence.sort_unstable();
-    let mut old_pressure = 0;
-    let mut max_pressure = 0;
-    let between = Uniform::from(0..sequence.len());
-    let mut rng = rand::rngs::StdRng::seed_from_u64(1234);
-    for _a in 0..10_000_000 {
-        let i = between.sample(&mut rng);
-        let j = between.sample(&mut rng);
-        if i == j {
-            continue;
-        }
-        let mut s = sequence.clone();
-        swap(&mut s, i, j);
-
-        let pressure = determine_pressure(&s, &nodes);
-        if (pressure < old_pressure && rng.gen::<f64>() < 0.1) || pressure >= old_pressure {
-            sequence = s.clone();
-            old_pressure = pressure;
-        }
-        if pressure > max_pressure {
-            max_pressure = pressure;
-            println!("new max {} {} {:?}", _a, max_pressure, sequence);
-        }
-    }
-    max_pressure
-}
-
-fn swap(s: &mut [String], i: usize, j: usize) {
-    let tmp = s[i].clone();
-    s[i] = s[j].clone();
-    s[j] = tmp;
-}
-
-fn determine_most_releasable_pressure_with_elephant(
-    nodes: HashMap<String, EffectiveNode>,
-) -> usize {
-    let sequence = nodes
-        .iter()
-        .map(|(l, _n)| l.to_string())
-        .filter(|l| l.chars().last().unwrap() == 'o')
-        .collect::<Vec<String>>();
-    let mut sequence0 = sequence[..sequence.len() / 2].to_vec();
-    sequence0.sort_unstable();
-    let mut sequence1 = sequence[sequence.len() / 2..].to_vec();
-    sequence1.sort_unstable();
-    let mut old_pressure = 0;
-    let mut max_pressure = 0;
-    let between = Uniform::from(0..sequence0.len());
-    let mut rng = rand::rngs::StdRng::seed_from_u64(1234);
-    for _a in 0..50_000_000 {
-        let i = between.sample(&mut rng);
-        let j = between.sample(&mut rng);
-        if i == j {
-            continue;
-        }
-
-        let mut s0 = sequence0.clone();
-        let mut s1 = sequence1.clone();
-        let p = rng.gen::<f64>();
-        if p < 0.333 {
-            swap(&mut s0, i, j);
-        } else if p < 0.666 {
-            swap(&mut s1, i, j);
-        } else {
-            swap_between(&mut s0, &mut s1, i, j);
-        }
-
-        let pressure = determine_pressure(&s0, &nodes) + determine_pressure(&s1, &nodes);
-        if (pressure < old_pressure && rng.gen::<f64>() < 0.1) || pressure >= old_pressure {
-            sequence0 = s0.clone();
-            sequence1 = s1.clone();
-            old_pressure = pressure;
-        }
-        if pressure > max_pressure {
-            max_pressure = pressure;
-            println!("new max {} {} {:?}", _a, max_pressure, sequence);
-        }
-    }
-    max_pressure
-}
-
-fn swap_between(s0: &mut [String], s1: &mut [String], i: usize, j: usize) {
-    let tmp = s0[i].clone();
-    s0[i] = s1[j].clone();
-    s1[j] = tmp;
-}
-
-fn determine_pressure(sequence: &[String], nodes: &HashMap<String, EffectiveNode>) -> usize {
-    let mut position = "AA".to_string();
-    let mut pressure = 0;
-    let mut minute = 0;
-    'outer: for l in sequence {
-        for (target, weight) in nodes[&position].edges.iter() {
-            if target == l {
-                minute += weight;
-                if minute > MAX_TIME {
-                    break 'outer;
-                }
-                position = target.clone();
-                pressure += (MAX_TIME - minute) * nodes[target].rate;
-                continue 'outer;
+fn determine_pressure_for_subsets(
+    nodes: &HashMap<String, EffectiveNode>,
+    max_time: usize,
+) -> HashMap<String, usize> {
+    // BFS
+    let mut queue = BinaryHeap::new();
+    queue.push(State {
+        label: "AA".to_string(),
+        minute: 0,
+        pressure: 0,
+        visited: HashSet::new(),
+    });
+    let mut sets: HashMap<String, usize> = HashMap::new();
+    while let Some(current) = queue.pop() {
+        for (target, weight) in nodes[&current.label].edges.iter() {
+            if current.visited.contains(target) {
+                // don't open any valve twice
+                continue;
             }
+            let minute = current.minute + weight;
+            if minute > max_time {
+                // stay below the time limit
+                continue;
+            }
+            let pressure = current.pressure + (max_time - minute) * nodes[target].rate;
+            let mut visited = current.visited.clone();
+            visited.insert(target.to_string());
+            let mut key = visited.clone().into_iter().collect::<Vec<String>>();
+            key.sort_unstable();
+            let key = key.join(",");
+            if !sets.contains_key(&key) || sets[&key] < pressure {
+                sets.insert(key, pressure);
+            }
+            queue.push(State {
+                label: target.to_string(),
+                minute,
+                pressure,
+                visited,
+            });
         }
-        panic!("Should never be reached");
     }
-    pressure
+    sets
+}
+
+struct State {
+    label: String,
+    minute: usize,
+    pressure: usize,
+    visited: HashSet<String>,
+}
+
+impl Eq for State {}
+
+impl PartialEq for State {
+    fn eq(&self, other: &Self) -> bool {
+        self.visited.len().eq(&other.visited.len())
+    }
+}
+
+impl Ord for State {
+    fn cmp(&self, other: &Self) -> Ordering {
+        other.visited.len().cmp(&self.visited.len())
+    }
+}
+
+impl PartialOrd for State {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(other.visited.len().cmp(&self.visited.len()))
+    }
 }
