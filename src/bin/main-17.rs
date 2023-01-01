@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, collections::HashMap};
 
 fn main() {
     let filename = "inputs/17.txt";
@@ -11,10 +11,16 @@ fn main() {
 
 fn let_rocks_fall(jet_pattern: &str) -> Vec<Rock> {
     let jet_pattern = jet_pattern.chars().collect::<Vec<char>>();
+    let mut ticks = Vec::with_capacity(1000);
     let mut tick = 0;
-    let mut rocks = Vec::new();
+    let mut rocks = Vec::with_capacity(1000);
     let mut rock = Rock::new(0, 3);
-    while rocks.len() < 2022 {
+    let mut top = 0;
+    let pattern_height = 10;
+    let max_n_rocks = 1_000_000_000_000;
+    // let max_n_rocks = 2022;
+    let mut n_rocks = 0;
+    while n_rocks < max_n_rocks {
         let jet = jet_pattern[tick % jet_pattern.len()];
         match jet {
             '<' => rock.move_left(&rocks),
@@ -24,12 +30,45 @@ fn let_rocks_fall(jet_pattern: &str) -> Vec<Rock> {
         let success = rock.move_down(&rocks);
 
         if !success {
+            if rock.top() > top {
+                top = rock.top();
+            }
+            n_rocks += 1;
             rocks.push(rock);
-            let new_bottom = find_top(&rocks) + 4;
-            rock = Rock::new(rocks.len() % 5, new_bottom);
+            ticks.push(tick);
+            rock = Rock::new(rocks.len() % 5, top + 4);
         }
+
+        if rocks.len() > 100 && rocks.len() % 100 == 0 { // fast forward
+            if let Some((start_first, start_second)) = search_pattern(&rocks, pattern_height) {
+                let delta_rocks = start_second - start_first;
+                if max_n_rocks - n_rocks > delta_rocks {
+                    let delta_ticks = ticks[start_second] - ticks[start_first];
+                    let delta_bottom = rocks[start_second].bottom - rocks[start_first].bottom;
+
+                    rocks.truncate(start_second);
+                    ticks.truncate(start_second);
+                    n_rocks = rocks.len();
+                    tick = *ticks.last().unwrap();
+                    top = find_top(&rocks);
+
+                    let n_missing = max_n_rocks - n_rocks;
+                    let n_patterns = n_missing / delta_rocks;
+                    n_rocks += n_patterns * delta_rocks;
+                    tick += n_patterns * delta_ticks;
+                    top += n_patterns * delta_bottom;
+                    for i in 1..delta_rocks {
+                        rocks[start_first + i].bottom += n_patterns * delta_bottom;
+                    }
+
+                    rock = Rock::new(rocks.len() % 5, top + 4);
+                }
+            }
+        }
+
         tick += 1;
     }
+    assert!(n_rocks <= max_n_rocks);
     rocks
 }
 
@@ -279,12 +318,12 @@ impl Rock {
 }
 
 fn is_occupied(i: usize, j: usize, rocks: &[Rock]) -> bool {
-    for r in rocks
-        .iter()
-        .filter(|r| r.bottom < 4 || (r.bottom >= i - 4 && r.bottom <= i + 4))
-    {
+    for r in rocks.iter().rev() {
         if r.occupies(i, j) {
             return true;
+        }
+        if i > 100 && r.top() < i - 100 {
+            break;
         }
     }
     false
@@ -318,4 +357,29 @@ fn print_tower(rocks: &[Rock]) {
 
 fn find_top(rocks: &[Rock]) -> usize {
     rocks.iter().map(|r| r.top()).max().unwrap()
+}
+
+fn search_pattern(rocks: &[Rock], count: usize) -> Option<(usize, usize)>{
+    let mut patterns = HashMap::new();
+    for lowest_rock in 0..rocks.len() - count {
+        let bottom = rocks[lowest_rock].bottom;
+        let mut key = String::new();
+        for r in &rocks[lowest_rock..lowest_rock + count] {
+            let k = match r.kind {
+                RockKind::Hbar => 0,
+                RockKind::Plus => 1,
+                RockKind::RL => 2,
+                RockKind::Square => 3,
+                RockKind::VBar => 4,
+            };
+            key.push_str(&k.to_string());
+            key.push_str(&r.left.to_string());
+            key.push_str(&(r.bottom - bottom).to_string());
+        }
+        if patterns.contains_key(&key) {
+            return Some((patterns[&key], lowest_rock));
+        }
+        patterns.insert(key, lowest_rock);
+    }
+    None
 }
