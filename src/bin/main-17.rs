@@ -1,4 +1,4 @@
-use std::{fs, collections::HashMap};
+use std::{collections::HashMap, fs};
 
 fn main() {
     let filename = "inputs/17.txt";
@@ -39,7 +39,8 @@ fn let_rocks_fall(jet_pattern: &str) -> Vec<Rock> {
             rock = Rock::new(rocks.len() % 5, top + 4);
         }
 
-        if rocks.len() > 100 && rocks.len() % 100 == 0 { // fast forward
+        if rocks.len() > 100 && rocks.len() % 100 == 0 {
+            // fast forward
             if let Some((start_first, start_second)) = search_pattern(&rocks, pattern_height) {
                 let delta_rocks = start_second - start_first;
                 if max_n_rocks - n_rocks > delta_rocks {
@@ -359,7 +360,7 @@ fn find_top(rocks: &[Rock]) -> usize {
     rocks.iter().map(|r| r.top()).max().unwrap()
 }
 
-fn search_pattern(rocks: &[Rock], count: usize) -> Option<(usize, usize)>{
+fn search_pattern(rocks: &[Rock], count: usize) -> Option<(usize, usize)> {
     let mut patterns = HashMap::new();
     for lowest_rock in 0..rocks.len() - count {
         let bottom = rocks[lowest_rock].bottom;
