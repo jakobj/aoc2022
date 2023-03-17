@@ -1,14 +1,29 @@
-use std::{fs, collections::{HashSet, HashMap}};
+use std::{
+    collections::{HashMap, HashSet},
+    fs,
+};
 
 fn main() {
     let filename = "inputs/23.txt";
     let content = fs::read_to_string(filename).unwrap();
+
     let elves = parse_elf_positions(&content);
-    // println!("{}", to_string(&elves));
-    // println!("------");
-    let elves = distribute_elves(elves, 10);
-    let count: usize = to_string(&elves).chars().map(|c| if c == '.' { 1 } else { 0 }).sum();
-    println!("There are {} empty ground tiles in the rectangle spanned by the elves.", count);
+    let (elves, _) = distribute_elves(elves, 10);
+    let count: usize = to_string(&elves)
+        .chars()
+        .map(|c| if c == '.' { 1 } else { 0 })
+        .sum();
+    println!(
+        "There are {} empty ground tiles in the rectangle spanned by the elves.",
+        count
+    );
+
+    let elves = parse_elf_positions(&content);
+    let (_, round) = distribute_elves(elves, 100_000);
+    println!(
+        "The number of the first round where no Elf moves is {}.",
+        round + 1
+    );
 }
 
 fn parse_elf_positions(content: &str) -> Vec<Elf> {
@@ -16,7 +31,13 @@ fn parse_elf_positions(content: &str) -> Vec<Elf> {
     for (y, l) in content.lines().enumerate() {
         for (x, c) in l.chars().enumerate() {
             if c == '#' {
-                elves.push(Elf{ position: Position{ x: x as i64, y: y as i64 }, proposal: None });
+                elves.push(Elf {
+                    position: Position {
+                        x: x as i64,
+                        y: y as i64,
+                    },
+                    proposal: None,
+                });
             }
         }
     }
@@ -26,7 +47,6 @@ fn parse_elf_positions(content: &str) -> Vec<Elf> {
 #[derive(Clone, Copy, Debug)]
 struct Elf {
     position: Position,
-    // TODO necessary to use Option?
     proposal: Option<Position>,
 }
 
@@ -36,36 +56,45 @@ struct Position {
     y: i64,
 }
 
-fn distribute_elves(mut elves: Vec<Elf>, rounds: usize) -> Vec<Elf> {
-    for round in 0..rounds {
+fn distribute_elves(mut elves: Vec<Elf>, rounds: usize) -> (Vec<Elf>, usize) {
+    let mut previous_elf_configuration = format!("{:?}", elves);
+
+    let mut round = 0;
+    while round < rounds {
         let mut elves_with_proposals = Vec::new();
-        let positions = elves.iter().map(|e| e.position).collect::<HashSet<Position>>();
+        let positions = elves
+            .iter()
+            .map(|e| e.position)
+            .collect::<HashSet<Position>>();
         for e in elves.iter() {
             elves_with_proposals.push(propose(e, &positions, round));
         }
 
         elves.clear();
-        let mut proposed_positions = HashMap::new();
-        for e in elves_with_proposals.iter() {
-            let count;
-            if !proposed_positions.contains_key(&e.proposal.unwrap()) {
-                count = 1
-            } else {
-                count = proposed_positions[&e.proposal.unwrap()] + 1;
-            }
-            proposed_positions.insert(e.proposal.unwrap(), count);
-        }
-
+        let proposed_positions = determine_proposed_positions(&elves_with_proposals);
         for e in elves_with_proposals {
             if proposed_positions[&e.proposal.unwrap()] < 2 {
-                elves.push(Elf{ position: e.proposal.unwrap(), proposal: None });
+                elves.push(Elf {
+                    position: e.proposal.unwrap(),
+                    proposal: None,
+                });
             } else {
-                elves.push(Elf{ position: e.position, proposal: None });
+                elves.push(Elf {
+                    position: e.position,
+                    proposal: None,
+                });
             }
         }
-        // println!("{}\n", to_string(&elves));
+
+        let elf_configuration = format!("{:?}", elves);
+        if elf_configuration == previous_elf_configuration {
+            return (elves, round);
+        }
+        previous_elf_configuration = elf_configuration;
+
+        round += 1;
     }
-    elves
+    (elves, round)
 }
 
 fn propose(e: &Elf, positions: &HashSet<Position>, round: usize) -> Elf {
@@ -76,13 +105,19 @@ fn propose(e: &Elf, positions: &HashSet<Position>, round: usize) -> Elf {
             if delta_y == 0 && delta_x == 0 {
                 continue;
             }
-            if positions.contains(&Position{ x: e.position.x + delta_x, y: e.position.y + delta_y }) {
+            if positions.contains(&Position {
+                x: e.position.x + delta_x,
+                y: e.position.y + delta_y,
+            }) {
                 elf_nearby = true;
             }
         }
     }
     if !elf_nearby {
-        return Elf{ position: e.position, proposal: Some(e.position) };
+        return Elf {
+            position: e.position,
+            proposal: Some(e.position),
+        };
     }
 
     // then choose a move if a(t least) one elf is nearby
@@ -96,30 +131,69 @@ fn propose(e: &Elf, positions: &HashSet<Position>, round: usize) -> Elf {
             _ => panic!("should not be reached"),
         };
         if proposal.is_some() {
-            return Elf{ position: e.position, proposal };
+            return Elf {
+                position: e.position,
+                proposal,
+            };
         }
     }
 
-    Elf{ position: e.position, proposal: Some(e.position) }
-    // panic!("could not figure out what to do");
+    Elf {
+        position: e.position,
+        proposal: Some(e.position),
+    }
 }
 
-fn move_vertical(position: Position, positions: &HashSet<Position>, delta_y: i64) -> Option<Position> {
+fn move_vertical(
+    position: Position,
+    positions: &HashSet<Position>,
+    delta_y: i64,
+) -> Option<Position> {
     for delta_x in [-1, 0, 1] {
-        if positions.contains(&Position{ x: position.x + delta_x, y: position.y + delta_y }) {
+        if positions.contains(&Position {
+            x: position.x + delta_x,
+            y: position.y + delta_y,
+        }) {
             return None;
         }
     }
-    Some(Position{ x: position.x, y: position.y + delta_y })
+    Some(Position {
+        x: position.x,
+        y: position.y + delta_y,
+    })
 }
 
-fn move_horizontal(position: Position, positions: &HashSet<Position>, delta_x: i64) -> Option<Position> {
+fn move_horizontal(
+    position: Position,
+    positions: &HashSet<Position>,
+    delta_x: i64,
+) -> Option<Position> {
     for delta_y in [-1, 0, 1] {
-        if positions.contains(&Position{ x: position.x + delta_x, y: position.y + delta_y }) {
+        if positions.contains(&Position {
+            x: position.x + delta_x,
+            y: position.y + delta_y,
+        }) {
             return None;
         }
     }
-    Some(Position{ x: position.x + delta_x, y: position.y })
+    Some(Position {
+        x: position.x + delta_x,
+        y: position.y,
+    })
+}
+
+fn determine_proposed_positions(elves_with_proposals: &Vec<Elf>) -> HashMap<Position, usize> {
+    let mut proposed_positions = HashMap::new();
+    for e in elves_with_proposals.iter() {
+        let count;
+        if !proposed_positions.contains_key(&e.proposal.unwrap()) {
+            count = 1
+        } else {
+            count = proposed_positions[&e.proposal.unwrap()] + 1;
+        }
+        proposed_positions.insert(e.proposal.unwrap(), count);
+    }
+    proposed_positions
 }
 
 fn to_string(elves: &Vec<Elf>) -> String {
@@ -187,13 +261,13 @@ mod tests {
 .....
 ..#..";
         let elves = parse_elf_positions(&content);
-        let elves = distribute_elves(elves, 3);
+        let (elves, _) = distribute_elves(elves, 3);
         let s = to_string(&elves);
         assert_eq!(s, expected);
 
         // since this is a configuration where no elves need to move, nothing
         // should change if we distribute for some more rounds
-        let elves = distribute_elves(elves, 3);
+        let (elves, _) = distribute_elves(elves, 3);
         let s = to_string(&elves);
         assert_eq!(s, expected);
     }
@@ -224,7 +298,7 @@ mod tests {
 ............
 ...#..#..#..";
         let elves = parse_elf_positions(&content);
-        let elves = distribute_elves(elves, 10);
+        let (elves, _) = distribute_elves(elves, 10);
         let s = to_string(&elves);
         assert_eq!(s, expected);
     }
