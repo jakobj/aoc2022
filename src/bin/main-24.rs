@@ -1,4 +1,8 @@
-use std::{fs, collections::{BinaryHeap, HashSet}, cmp::Ordering};
+use std::{
+    cmp::Ordering,
+    collections::{BinaryHeap, HashSet},
+    fs,
+};
 
 fn main() {
     let filename = "inputs/24.txt";
@@ -7,15 +11,37 @@ fn main() {
     let final_position = determine_position(&content, 'Z');
     let blizzards = determine_blizzards(&content);
     let layout = determine_layout(&content);
-    let final_state = find_path(initial_position, final_position, &blizzards, layout);
-    println!("You and the elves can reach the goal in {} minutes.", final_state.steps);
+
+    let mut total = 0;
+    let (final_state, blizzards) = find_path(initial_position, final_position, &blizzards, layout);
+    println!(
+        "You and the elves can reach the goal in {} minutes.",
+        final_state.minute
+    );
+    total += final_state.minute;
+
+    let (final_state, blizzards) = find_path(final_position, initial_position, &blizzards, layout);
+    println!("The way back takes {} minutes.", final_state.minute);
+    total += final_state.minute;
+
+    let (final_state, _) = find_path(initial_position, final_position, &blizzards, layout);
+    println!(
+        "The trip back to the goal again takes {} minutes.",
+        final_state.minute
+    );
+    total += final_state.minute;
+
+    println!("The total time is {} minutes.", total);
 }
 
 fn determine_position(content: &str, marker: char) -> Position {
     for (y, l) in content.lines().enumerate() {
         for (x, c) in l.chars().enumerate() {
             if c == marker {
-                return Position{ x: x as i64, y: y as i64 };
+                return Position {
+                    x: x as i64,
+                    y: y as i64,
+                };
             }
         }
     }
@@ -31,11 +57,23 @@ struct Position {
 impl Position {
     fn next(&self, direction: Direction) -> Self {
         match direction {
-            Direction::Up => Position{ x: self.x, y: self.y - 1 },
-            Direction::Right => Position{ x: self.x + 1, y: self.y },
-            Direction::Down => Position{ x: self.x, y: self.y + 1 },
-            Direction::Left => Position{ x: self.x - 1, y: self.y },
-            Direction::None => *self
+            Direction::Up => Position {
+                x: self.x,
+                y: self.y - 1,
+            },
+            Direction::Right => Position {
+                x: self.x + 1,
+                y: self.y,
+            },
+            Direction::Down => Position {
+                x: self.x,
+                y: self.y + 1,
+            },
+            Direction::Left => Position {
+                x: self.x - 1,
+                y: self.y,
+            },
+            Direction::None => *self,
         }
     }
 }
@@ -46,7 +84,13 @@ fn determine_blizzards(content: &str) -> Vec<Blizzard> {
     for (y, l) in content.lines().enumerate() {
         for (x, c) in l.chars().enumerate() {
             if markers.iter().any(|&m| m == c) {
-                blizzards.push(Blizzard{ position: Position{ x: x as i64, y: y as i64 }, direction: Direction::from(c) });
+                blizzards.push(Blizzard {
+                    position: Position {
+                        x: x as i64,
+                        y: y as i64,
+                    },
+                    direction: Direction::from(c),
+                });
             }
         }
     }
@@ -57,12 +101,6 @@ fn determine_blizzards(content: &str) -> Vec<Blizzard> {
 struct Blizzard {
     position: Position,
     direction: Direction,
-}
-
-impl From<Blizzard> for String {
-    fn from(b: Blizzard) -> Self {
-        format!("{:?}{:?}", b.position, b.direction)
-    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -101,7 +139,7 @@ impl From<Direction> for char {
 fn determine_layout(content: &str) -> Layout {
     let height = content.lines().count();
     let width = content.lines().next().unwrap().chars().count();
-    Layout{ height, width }
+    Layout { height, width }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -112,8 +150,10 @@ struct Layout {
 
 impl Layout {
     fn is_valid_position(&self, position: Position) -> bool {
-        // handle starting position separately
-        if position.x == 1 && position.y == 0 {
+        // handle initial and final position separately
+        if (position.x == 1 && position.y == 0)
+            || (position.x == self.width as i64 - 2 && position.y == self.height as i64 - 1)
+        {
             return true;
         }
         if position.y < 1 || position.y >= self.height as i64 - 1 {
@@ -129,68 +169,114 @@ impl Layout {
         let max_y = self.height as i64 - 2;
         let max_x = self.width as i64 - 2;
         match direction {
-            Direction::Up => if position.y == 1 {
-                return Position{ x: position.x, y: max_y };
-            },
-            Direction::Right => if position.x == max_x {
-                return Position{ x: 1, y: position.y };
-            },
-            Direction::Down => if position.y == max_y {
-                return Position{ x: position.x, y: 1 };
-            },
-            Direction::Left => if position.x == 1 {
-                return Position{ x: max_x, y: position.y };
-            },
+            Direction::Up => {
+                if position.y == 1 {
+                    return Position {
+                        x: position.x,
+                        y: max_y,
+                    };
+                }
+            }
+            Direction::Right => {
+                if position.x == max_x {
+                    return Position {
+                        x: 1,
+                        y: position.y,
+                    };
+                }
+            }
+            Direction::Down => {
+                if position.y == max_y {
+                    return Position {
+                        x: position.x,
+                        y: 1,
+                    };
+                }
+            }
+            Direction::Left => {
+                if position.x == 1 {
+                    return Position {
+                        x: max_x,
+                        y: position.y,
+                    };
+                }
+            }
             Direction::None => panic!("couldn't wrap: {:?} {:?}", position, direction),
         };
         panic!("couldn't wrap: {:?} {:?}", position, direction);
     }
 }
 
-fn find_path(initial_position: Position, final_position: Position, blizzards: &Vec<Blizzard>, layout: Layout) -> State {
+fn find_path(
+    initial_position: Position,
+    final_position: Position,
+    blizzards: &Vec<Blizzard>,
+    layout: Layout,
+) -> (State, Vec<Blizzard>) {
+    // BFS
     let mut queue = BinaryHeap::new();
-    queue.push(State{ position: initial_position, steps: 0, heuristic: 0 });
+    queue.push(State {
+        position: initial_position,
+        minute: 0,
+    });
+
+    // store blizzards and positions to reuse over states with identical number
+    // of minutes passed
     let mut blizzards_by_step = Vec::new();
     blizzards_by_step.push(blizzards.clone());
     let mut blizzard_positions_by_step = Vec::new();
     blizzard_positions_by_step.push(blizzards_to_positions(&blizzards));
 
-    let blizzard_period = determine_blizzard_period(blizzards, layout);
-
+    // avoid revisiting identical configurations
     let mut visited = HashSet::new();
 
     while let Some(state) = queue.pop() {
-        let idx = (state.steps + 1) % blizzard_period;
+        let next_minute = state.minute + 1;
 
-        let s = format!("{:?} {}", state.position, idx);
+        // since blizzard configuration only depends on minute, we just use that
+        // instead of location of all blizzards for hashing
+        let s = format!("{:?} {}", state.position, next_minute);
         if visited.contains(&s) {
             continue;
         }
         visited.insert(s);
 
-        if idx >= blizzard_positions_by_step.len() {
+        if next_minute >= blizzard_positions_by_step.len() {
             let next_blizzards = update_blizzards(&blizzards_by_step.last().unwrap(), layout);
             let next_blizzard_positions = blizzards_to_positions(&next_blizzards);
             blizzards_by_step.push(next_blizzards);
             blizzard_positions_by_step.push(next_blizzard_positions);
         }
-        let next_blizzard_positions = &blizzard_positions_by_step[idx];
+        let next_blizzard_positions = &blizzard_positions_by_step[next_minute];
 
-        for direction in [Direction::Up, Direction::Right, Direction::Down, Direction::Left, Direction::None] {
+        for direction in [
+            Direction::Up,
+            Direction::Right,
+            Direction::Down,
+            Direction::Left,
+            Direction::None,
+        ] {
             let next_position = state.position.next(direction);
-
-            if next_position == final_position {
-                return State{ position: next_position, steps: state.steps + 1, heuristic: state.steps as i64 + 1 };
-            }
 
             if !layout.is_valid_position(next_position) {
                 continue;
             }
 
+            if next_position == final_position {
+                return (
+                    State {
+                        position: next_position,
+                        minute: next_minute,
+                    },
+                    blizzards_by_step[next_minute].clone(),
+                );
+            }
+
             if !next_blizzard_positions.contains(&next_position) {
-                let heuristic = state.steps as i64;
-                // let heuristic = state.steps as i64 + compute_heuristic(next_position, final_position);
-                queue.push(State{ position: next_position, steps: state.steps + 1, heuristic });
+                queue.push(State {
+                    position: next_position,
+                    minute: next_minute,
+                });
             }
         }
     }
@@ -200,59 +286,34 @@ fn find_path(initial_position: Position, final_position: Position, blizzards: &V
 #[derive(Clone, Debug)]
 struct State {
     position: Position,
-    steps: usize,
-    heuristic: i64,
+    minute: usize,
 }
 
 impl Eq for State {}
 
 impl PartialEq for State {
     fn eq(&self, other: &Self) -> bool {
-        // self.steps.eq(&other.steps)
-        self.heuristic.eq(&other.heuristic)
+        self.minute.eq(&other.minute)
     }
 }
 
 impl Ord for State {
     fn cmp(&self, other: &Self) -> Ordering {
-        // other.steps.cmp(&self.steps)
-        other.heuristic.cmp(&self.heuristic)
+        other.minute.cmp(&self.minute)
     }
 }
 
 impl PartialOrd for State {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        // Some(other.steps.cmp(&self.steps))
-        Some(other.heuristic.cmp(&self.heuristic))
+        Some(other.minute.cmp(&self.minute))
     }
 }
 
 fn blizzards_to_positions(blizzards: &Vec<Blizzard>) -> HashSet<Position> {
-    blizzards.iter().map(|&b| b.position).collect::<HashSet<Position>>()
-}
-
-fn determine_blizzard_period(blizzards: &Vec<Blizzard>, layout: Layout) -> usize {
-    fn blizzards_to_string(blizzards: &Vec<Blizzard>) -> String {
-        blizzards.iter().map(|&b: &Blizzard| {
-            let s: String = b.into();
-            s
-        }).collect::<String>()
-    }
-
-    let mut blizzard_configurations = HashSet::new();
-    blizzard_configurations.insert(blizzards_to_string(blizzards));
-
-    let mut period = 1;
-    let mut blizzards = blizzards.clone();
-    loop {
-        blizzards = update_blizzards(&blizzards, layout);
-        let s = blizzards_to_string(&blizzards);
-        if blizzard_configurations.contains(&s) {
-            return period;
-        }
-        blizzard_configurations.insert(s);
-        period += 1;
-    }
+    blizzards
+        .iter()
+        .map(|&b| b.position)
+        .collect::<HashSet<Position>>()
 }
 
 fn update_blizzards(blizzards: &Vec<Blizzard>, layout: Layout) -> Vec<Blizzard> {
@@ -262,16 +323,15 @@ fn update_blizzards(blizzards: &Vec<Blizzard>, layout: Layout) -> Vec<Blizzard> 
         if !layout.is_valid_position(next_position) {
             next_position = layout.wrap_around(b.position, b.direction);
         }
-        updated_blizzards.push(Blizzard{ position: next_position, direction: b.direction });
+        updated_blizzards.push(Blizzard {
+            position: next_position,
+            direction: b.direction,
+        });
     }
     updated_blizzards
 }
 
-fn compute_heuristic(position: Position, final_position: Position) -> i64 {
-    (final_position.x - position.x).abs() + (final_position.y - position.y).abs()
-}
-
-fn print(position: Position, blizzards: &Vec<Blizzard>, layout: Layout) {
+fn _print(position: Position, blizzards: &Vec<Blizzard>, layout: Layout) {
     let mut map = Vec::new();
     for _ in 0..layout.height {
         map.push(vec!['.'; layout.width]);
@@ -293,6 +353,9 @@ fn print(position: Position, blizzards: &Vec<Blizzard>, layout: Layout) {
         map[b.position.y as usize][b.position.x as usize] = b.direction.into();
     }
 
-    let s = map.iter().map(|r| r.iter().collect::<String>() + "\n").collect::<String>();
+    let s = map
+        .iter()
+        .map(|r| r.iter().collect::<String>() + "\n")
+        .collect::<String>();
     println!("{}", s);
 }
