@@ -1,6 +1,14 @@
-use std::{str::FromStr, ops::{Add, Mul}};
+use std::{str::FromStr, ops::{Add, Mul}, fs, fmt};
 
 fn main() {
+    let filename = "inputs/25.txt";
+    let content = fs::read_to_string(filename).unwrap();
+
+    let mut result = Snafu::zero();
+    for s in content.lines() {
+        result = result + s.parse().unwrap();
+    }
+    println!("You should supply the SNAFU number '{}' to Bob's console.", result);
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -109,29 +117,36 @@ impl Mul for Snafu {
     }
 }
 
-impl From<Snafu> for i64 {
-    fn from(source: Snafu) -> Self {
-        let mut target = 0;
-        for (place, digit) in source.digits.iter().enumerate() {
-            target += *digit as i64 * 5_i64.pow(place as u32);
-        }
-        target
-    }
-}
-
-impl From<Snafu> for String {
-    fn from(source: Snafu) -> Self {
-        let mut target = String::new();
-        for digit in source.digits.iter() {
-            let c = match digit {
+impl fmt::Display for Snafu {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut s = String::new();
+        for d in self.digits {
+            let c = match d {
                 2 => '2',
                 1 => '1',
                 0 => '0',
                 -1 => '-',
                 -2 => '=',
-                _ => panic!("invalid digit in Snafu: {}", digit),
+                _ => panic!("invalid digit in Snafu: {}", d),
             };
-            target.push(c);
+            s.push(c);
+        }
+        let mut c = s.pop().unwrap();
+        while c == '0' {
+            c = s.pop().unwrap();
+        }
+        s.push(c);
+        let s = s.chars().rev().collect::<String>();
+        write!(f, "{}", s)
+    }
+}
+
+
+impl From<Snafu> for i64 {
+    fn from(source: Snafu) -> Self {
+        let mut target = 0;
+        for (place, digit) in source.digits.iter().enumerate() {
+            target += *digit as i64 * 5_i64.pow(place as u32);
         }
         target
     }
