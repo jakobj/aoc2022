@@ -1,4 +1,8 @@
-use std::{str::FromStr, ops::{Add, Mul}, fs, fmt};
+use std::{
+    fmt, fs,
+    ops::{Add, Mul},
+    str::FromStr,
+};
 
 fn main() {
     let filename = "inputs/25.txt";
@@ -8,29 +12,32 @@ fn main() {
     for s in content.lines() {
         result = result + s.parse().unwrap();
     }
-    println!("You should supply the SNAFU number '{}' to Bob's console.", result);
+    println!(
+        "You should supply the SNAFU number '{}' to Bob's console.",
+        result
+    );
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct Snafu{
+struct Snafu {
     digits: [i8; 20],
 }
 
 impl Snafu {
     fn zero() -> Self {
-        Self{ digits: [0; 20] }
+        Self { digits: [0; 20] }
     }
 
     fn one() -> Self {
         let mut digits = [0; 20];
         digits[0] = 1;
-        Self{ digits }
+        Self { digits }
     }
 
     fn ten() -> Self {
         let mut digits = [0; 20];
         digits[1] = 2;
-        Self{ digits }
+        Self { digits }
     }
 
     fn pow(&self, exp: u32) -> Self {
@@ -57,17 +64,21 @@ impl FromStr for Snafu {
                 '0' => 0,
                 '-' => -1,
                 '=' => -2,
-                _ => return Err(Self::Err{}),
+                _ => return Err(Self::Err {}),
             };
             digits[place] = d;
         }
-        Ok(Self{ digits })
+        Ok(Self { digits })
     }
 }
 
 impl From<i64> for Snafu {
     fn from(source: i64) -> Self {
-        let source = source.to_string().chars().map(|c| c.to_string().parse::<i8>().unwrap()).collect::<Vec<i8>>();
+        let source = source
+            .to_string()
+            .chars()
+            .map(|c| c.to_string().parse::<i8>().unwrap())
+            .collect::<Vec<i8>>();
         let mut target = Snafu::zero();
         for (place, digit) in source.iter().rev().enumerate() {
             for _ in 0..*digit {
@@ -96,7 +107,7 @@ impl Add for Snafu {
             }
             digits[place] = d;
         }
-        Self::Output{ digits }
+        Self::Output { digits }
     }
 }
 
@@ -140,7 +151,6 @@ impl fmt::Display for Snafu {
         write!(f, "{}", s)
     }
 }
-
 
 impl From<Snafu> for i64 {
     fn from(source: Snafu) -> Self {
